@@ -22,6 +22,11 @@ on:
         required: false
         type: boolean
         default: true
+      issue_assignees:
+        description: 'Comma-separated list of GitHub usernames to assign issues to on rotation when gTech-team-review-pending is applied'
+        required: false
+        type: string
+        default: 'maitry63,mrinalghoshh,dhantule'
     secrets:
       GEMINI_API:
         required: true
@@ -220,6 +225,7 @@ jobs:
           LABELS_OUTPUT: '${{ steps.gemini_issue_analysis.outputs.summary }}'
           ALLOWED_LABELS: '${{ steps.get_labels.outputs.available_labels }}'
           ENABLE_AUTO_CLOSE: '${{ inputs.enable_auto_close }}'
+          CONFIG_ISSUE_ASSIGNEES: '${{ inputs.issue_assignees }}'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
@@ -295,6 +301,19 @@ jobs:
                 labels: labelsToAdd,
               });
               core.info(`Successfully added labels to #${issueNumber}: ${labelsToAdd.join(', ')}`);
+            }
+
+            const rawAssignees = process.env.CONFIG_ISSUE_ASSIGNEES || '';
+            const assigneesList = rawAssignees.split(',').map(s => s.trim()).filter(Boolean);
+            if (!autoClose && labelsToAdd.includes('gTech-team-review-pending') && assigneesList.length > 0) {
+              const chosenAssignee = assigneesList[issueNumber % assigneesList.length];
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                assignees: [chosenAssignee],
+              });
+              core.info(`Assigned #${issueNumber} to ${chosenAssignee}`);
             }
 
             if (responseBody) {
